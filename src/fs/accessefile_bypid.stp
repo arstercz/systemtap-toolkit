@@ -1,0 +1,35 @@
+#!/usr/bin/env stap
+
+global stats
+global found
+global pid = 0
+
+probe begin
+{
+  if (pid == 0) error("need pid number.")
+
+  log("Enter Ctrl-C to end.");
+  printf("Tracing pid %d \n", pid)
+}
+
+probe vfs.read.return, vfs.write.return {
+    if (pid() == pid && $return > 0) {
+        path = __file_filename(file)
+        stats[path] <<< $return
+        found++;
+    }
+}
+
+probe end {
+  if (!found) {
+    println("No file observed so far.")
+  } else {
+    printf("\n=== Top 15 file read/write ===\n")
+
+    i = 0
+    foreach (path in stats- limit 15) {
+        printf("#%d: %d times, %d bytes read/write in file %s.\n",
+               ++i, @count(stats[path]), @sum(stats[path]), path)
+    }
+  }
+}

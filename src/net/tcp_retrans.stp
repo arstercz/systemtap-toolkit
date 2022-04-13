@@ -1,0 +1,39 @@
+#!/usr/bin/stap
+
+global record%
+global destport = 0
+
+probe begin {
+    if (destport > 0) printf("=> Only capture destination port: %d\n\n", destport)
+    log("Printing tcp retransmission, Enter Ctrl-C to end.")
+}
+
+probe kernel.function("tcp_retransmit_skb") {
+    rto = tcp_get_info_rto($sk)
+    saddr   = format_ipaddr(__ip_sock_saddr($sk), __ip_sock_family($sk))
+    daddr   = format_ipaddr(__ip_sock_daddr($sk), __ip_sock_family($sk))
+    sport   = __tcp_sock_sport($sk)
+    dport   = __tcp_sock_dport($sk)
+
+    //skip when port equal dport
+    if (destport > 0 && destport != dport) next
+
+    lastrto = record[saddr, sport, daddr, dport]
+    state = tcp_ts_get_info_state($sk)
+
+    if (lastrto != rto) {
+        if (lastrto) {
+            printf("%-28s %s:%d => %s:%d STATE:%s RTO:%d -> %d (ms)\n", tz_ctime(gettimeofday_s()),
+                saddr, sport, daddr, dport, tcp_sockstate_str(state), lastrto/1000, rto/1000)
+        } else {
+            printf("%-28s %s:%d => %s:%d STATE:%s RTO:%d (ms)\n", tz_ctime(gettimeofday_s()),
+                saddr, sport, daddr, dport, tcp_sockstate_str(state), rto/1000)
+        }
+    }
+
+    record[saddr, sport, daddr, dport] = rto
+}
+
+probe end {
+    delete record
+}

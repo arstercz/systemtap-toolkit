@@ -1,0 +1,13 @@
+#!/usr/bin/env stap
+# log any execve syscall
+
+probe begin {
+    log("Enter Ctrl-c to end...")
+    printf("%-28s %6s %6s %6s %16s %s\n", 
+             "TIME", "UID", "PID", "PPID", "COMM", "ARGS")
+}
+
+probe syscall.execve.return {
+    printf("%-28s %6d %6d %6d %16s %s\n", tz_ctime(gettimeofday_s()), 
+            uid(), pid(), ppid(), execname(), cmdline_str())
+}

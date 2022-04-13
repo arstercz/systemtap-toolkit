@@ -1,0 +1,36 @@
+#!/usr/bin/env stap
+# get top io of the processes
+
+global reads%, writes%, io%
+
+probe begin {
+    log("Get the top 15 io of the processes every 5000ms...")
+}
+
+probe vfs.read.return {
+    reads[execname(), pid()] += bytes_read
+}
+
+probe vfs.write.return {
+    writes[execname(), pid()] += bytes_written
+}
+
+probe timer.ms(5000) {
+    printf("%-20s %6s %12s %12s\n", "Process", "PID", "Read(KB)", "Write(KB)")
+
+    foreach ([name, pid] in reads) {
+      io[name, pid] += reads[name, pid]
+    }
+    foreach ([name, pid] in writes) {
+      io[name, pid] += writes[name, pid]
+    }
+
+    foreach ([name,pid] in io- limit 15) {
+      printf("%-20s %6d %12d %12d\n", name, pid, reads[name, pid]/1024, writes[name, pid]/1204)
+    }
+    printf("\n")
+
+    delete reads
+    delete writes
+    delete io
+}

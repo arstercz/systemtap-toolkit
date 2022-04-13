@@ -1,0 +1,83 @@
+#!/usr/bin/env stap
+
+global latency_stats
+global start_times
+global found
+global destport = 0
+
+probe begin {
+  log("Enter Ctrl-C to end.")
+  if (destport == 0) error("doest not set destport value")
+  printf("Tracing the TCP receive queues for packets to the port %d\n", destport)
+}
+
+/* TODO: take into account the TCP out_of_order queue (i.e., tcp_ofo_queue). */
+probe kernel.function("tcp_queue_rcv")!,
+      kernel.function("tcp_data_queue")
+{
+    tcphdr = __get_skb_tcphdr($skb)
+    dport = __tcp_skb_dport(tcphdr)
+    sport = __tcp_skb_sport(tcphdr)
+
+    if (dport == destport && start_times[$sk, sport] == 0) {
+        //printf("tcp_queue_rcv: queue=%p sk=%p sport=%d\n",
+        //       &$sk->sk_receive_queue, $sk, sport)
+        if ($skb->len > 0) {
+            //println("probe func: ", probefunc())
+            if (@cast($skb->cb, "tcp_skb_cb")->seq != @cast($skb->cb, "tcp_skb_cb")->end_seq) {
+                start_times[$sk, sport] = gettimeofday_us()
+            } else {
+                //println("found seq == end_seq")
+            }
+        }
+    }
+}
+
+probe kernel.function("tcp_recvmsg"), kernel.function("tcp_recv_skb") {
+    q = &$sk->sk_receive_queue
+    skb = $sk->sk_receive_queue->next
+    if (q != skb) {
+        /* queue is not empty */
+        tcphdr = __get_skb_tcphdr(skb)
+        dport = __tcp_skb_dport(tcphdr)
+
+        if (dport == destport) {
+            sport = __tcp_skb_sport(tcphdr)
+            begin = start_times[$sk, sport]
+            if (begin > 0) {
+                //printf("tcp recvmsg: port=$dport sk=%p\n", $sk)
+                latency_stats <<< (gettimeofday_us() - begin)
+                found = 1
+                delete start_times[$sk, sport]
+            }
+        }
+    }
+}
+
+probe kernel.function("tcp_close"), kernel.function("tcp_disconnect") {
+    q = &$sk->sk_receive_queue
+    skb = $sk->sk_receive_queue->next
+    if (q != skb) {
+        /* queue is not empty */
+        tcphdr = __get_skb_tcphdr(skb)
+        dport = __tcp_skb_dport(tcphdr)
+
+        if (dport == destport) {
+            sport = __tcp_skb_sport(tcphdr)
+            delete start_times[$sk, sport]
+        }
+    }
+}
+
+probe end {
+  if (!found) {
+      println("\nNo queued received packets found yet.")
+
+  } else {
+      println("=== Distribution of First-In-First-Out Latency (us) in TCP Receive Queue ===")
+      printf("min/avg/max: %d/%d/%d\n",
+             @min(latency_stats), @avg(latency_stats), @max(latency_stats))
+      println(@hist_log(latency_stats))
+  }
+}
+
