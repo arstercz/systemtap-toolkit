@@ -54,10 +54,12 @@ systemtap-4.0-9.el7.x86_64
 
 #### 直接运行
 
+> 直接运行方式需要安装上述提到的所有依赖.
+
 ```bash
 # stap tcp_conn.stp
-                        TIME   EUID    UID    GID              CMD    PID   PORT                               IP_SOURCE
-Tue Oct 29 19:48:11 2019 CST    996    996    994     redis-server  35307   6379                            10.3.254.119
+                        TIME   EUID    UID    GID              CMD    PID   PORT                            IP_SOURCE
+Tue Oct 29 19:48:11 2019 CST    996    996    994     redis-server  35307   6379                            10.1.1.19
 ```
 #### 编译模块运行
 
@@ -70,11 +72,11 @@ tcp_conn.ko
 # staprun tcp_conn.ko destport=6379
 => Only capture port: 6379
 
-                        TIME   EUID    UID    GID              CMD    PID   PORT                               IP_SOURCE
-Tue Oct 29 19:52:52 2019 CST    996    996    994     redis-server  35307   6379                            10.3.254.119
+                        TIME   EUID    UID    GID              CMD    PID   PORT                            IP_SOURCE
+Tue Oct 29 19:52:52 2019 CST    996    996    994     redis-server  35307   6379                            10.1.1.19
 ```
 
-这种方式适合线上系统的排错, 如下所示, 以内核模块方式运行线上系统仅需要以下安装包:
+可以预见, 这种方式更适合线上系统的排错, 如下所示, 以内核模块方式运行线上系统仅需要以下安装包:
 ```
 kernel-3.10.0-957.27.2.el7.x86_64
 kernel-headers-3.10.0-957.27.2.el7.x86_64
